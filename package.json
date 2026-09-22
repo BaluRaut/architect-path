@@ -1,0 +1,27 @@
+{
+  "name": "architect-path",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tech Lead to AI + Geospatial Architect: runnable modules and one flagship project.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "m": "tsx src/run.ts",
+    "list": "tsx src/run.ts --list",
+    "db:up": "docker compose up -d && tsx src/lib/wait-for-db.ts",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d && tsx src/lib/wait-for-db.ts && npm run seed",
+    "seed": "tsx data/seed.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "h3-js": "^4.5.0",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.0"
+  }
+}

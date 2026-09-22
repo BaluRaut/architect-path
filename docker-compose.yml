@@ -1,0 +1,49 @@
+# One command gives you a real spatial database with real query plans.
+#
+#   npm run db:up      start it and wait until it answers
+#   npm run seed       load the synthetic dataset
+#   npm run db:reset   wipe and start over
+#
+# The port is deliberately 55432, not 5432, so this cannot collide with a
+# Postgres you already run locally.
+
+services:
+  db:
+    # imresamu/postgis is the multi-architecture build of the official image:
+    # same Dockerfile, built for arm64 as well as amd64.
+    #
+    # The official postgis/postgis publishes amd64 only, on every tag. On an
+    # Apple Silicon Mac it fails with "no matching manifest for linux/arm64",
+    # or silently runs under emulation and gives you query timings that are
+    # not worth measuring. Since modules 04 and 05 are entirely about timing,
+    # that matters here more than usual.
+    #
+    # Verified working: PostGIS 3.5.3, GEOS 3.11.1, PROJ 9.1.1.
+    image: ${POSTGIS_IMAGE:-imresamu/postgis:17-3.5}
+    container_name: architect-path-db
+    environment:
+      POSTGRES_USER: architect
+      POSTGRES_PASSWORD: architect
+      POSTGRES_DB: architect
+    ports:
+      - "55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U architect -d architect"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    # Small but deliberate: enough shared buffers that index plans behave like
+    # a real server rather than a laptop toy, and timing output on by default.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - random_page_cost=1.1
+
+volumes:
+  pgdata:

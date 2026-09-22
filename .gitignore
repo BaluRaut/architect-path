@@ -1,0 +1,15 @@
+node_modules/
+results/
+.env
+.DS_Store
+*.log
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# local data dumps
+data/*.local.*
+pgdata/
