@@ -34,8 +34,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      # A smaller set in CI: the lessons hold, the runner does not spend a minute seeding.
-      - run: SEED_ROWS=120000 npm run seed
+      # The full dataset. A smaller one changes which plan the planner picks, which is
+      # itself one of the lessons, so CI should exercise the size the modules describe.
+      - run: npm run seed
       - name: Module 04
         run: npm run m -- 04 --solution
       - name: Module 05

@@ -80,13 +80,28 @@ const nonLeading = await explain(NON_LEADING_COLUMN);
 measure("district = 'Latur'   (leading column)", `startup cost ${leading.startupCost.toFixed(0)}, ${ms(leading.executionMs)}`);
 measure("crop = 'bajra'       (second column)", `startup cost ${nonLeading.startupCost.toFixed(0)}, ${ms(nonLeading.executionMs)}`);
 
-check("both filters use the same composite index", leading.usedIndex && nonLeading.usedIndex);
+check("the leading-column filter uses the composite index", leading.usedIndex);
+
+// The non-leading filter is worse, and there are two ways that shows up depending on
+// how big the table is. On a large table Postgres still uses the index but has to scan
+// all of it, so the startup cost jumps. On a small one it gives up and scans the table.
+// Both prove the same point, so accept either.
+const nonLeadingIsWorse = nonLeading.usedIndex
+  ? nonLeading.startupCost > leading.startupCost * 3
+  : nonLeading.usedSeqScan;
 check(
-  "the non-leading filter pays a much higher startup cost",
-  nonLeading.startupCost > leading.startupCost * 3,
-  `leading ${leading.startupCost.toFixed(0)} vs non-leading ${nonLeading.startupCost.toFixed(0)}`,
+  "the non-leading filter is measurably worse, one way or the other",
+  nonLeadingIsWorse,
+  nonLeading.usedIndex
+    ? `startup cost ${leading.startupCost.toFixed(0)} vs ${nonLeading.startupCost.toFixed(0)}`
+    : "it fell back to a sequential scan",
 );
-info("Both say 'index'. Only one of them is seeking. The startup cost is where that shows.");
+info(
+  nonLeading.usedIndex
+    ? "Both say 'index'. Only one of them is seeking. The startup cost is where that shows."
+    : "On this table size the planner gave up on the index entirely for the second column.",
+);
+info("Which of those two you see depends on how many rows you seeded, and both are correct.");
 info("Column order is not cosmetic: put the column you always filter on first.");
 
 // ── 4. Selectivity decides whether an index is worth using ─────────────────
