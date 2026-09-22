@@ -21,9 +21,19 @@ if (!state.ok) {
 section("04 · Postgres: indexes and the plan");
 info(state.detail);
 
-// Start from a known state so this is repeatable.
+// Start from a genuinely known state.
+//
+// VACUUM, not just ANALYZE, and the difference matters here. ANALYZE refreshes the
+// statistics the planner uses to estimate row counts. VACUUM also updates the
+// visibility map, which records which pages contain only rows every transaction can
+// see. Index-only scans need that map: without it Postgres cannot trust the index
+// alone and must visit the table anyway.
+//
+// If another module has just rewritten this table, step 5 and step 6 below will
+// quietly fall back to ordinary index scans until a vacuum catches up. That is not a
+// bug in your index; it is the visibility map doing its job.
 await q(`DROP INDEX IF EXISTS plots_crop_idx, plots_district_crop_sown_idx, plots_covered_idx`);
-await q("ANALYZE plots");
+await q("VACUUM ANALYZE plots");
 
 // ── 1. A table with no useful index ────────────────────────────────────────
 section("1. Before any index");
@@ -118,8 +128,11 @@ section("6. Index-only scans");
 const beforeCovered = (await time(() => q(COVERED))).timing;
 // TODO 3 — create a covering index so COVERED never touches the table.
 //   CREATE INDEX plots_covered_idx ON plots (district) INCLUDE (crop)
+//   VACUUM ANALYZE plots
 // COVERED selects district and crop. An index on district alone would still need
 // the table for crop. INCLUDE puts crop in the index without sorting by it.
+// VACUUM rather than ANALYZE: an index-only scan needs the visibility map, and only
+// a vacuum maintains it.
 const covered = await explain(COVERED);
 const afterCovered = (await time(() => q(COVERED))).timing;
 measure("plan", covered.indexOnly ? "Index Only Scan" : covered.usedIndex ? "Index Scan" : "Seq Scan");
@@ -127,12 +140,16 @@ measure("difference", speedup(beforeCovered.medianMs, afterCovered.medianMs));
 check("the query is answered without touching the table", covered.indexOnly, "the INCLUDE column is what makes this possible");
 
 section("Checks");
+// Only this module's own indexes. Other modules add their own to the same table,
+// and a check that counts all of them fails depending on what you ran last.
+const OWNED = ["plots_district_crop_sown_idx", "plots_crop_idx", "plots_covered_idx"];
 const indexes = await q<{ indexname: string }>(
-  `SELECT indexname FROM pg_indexes WHERE tablename = 'plots' AND indexname <> 'plots_pkey' ORDER BY indexname`,
+  `SELECT indexname FROM pg_indexes WHERE tablename = 'plots' AND indexname = ANY($1) ORDER BY indexname`,
+  [OWNED],
 );
 check("three indexes were created", indexes.length === 3, `found ${indexes.length}: ${indexes.map((i) => i.indexname).join(", ") || "none"}`);
 check(
-  "statistics were refreshed after each index",
+  "statistics and the visibility map were refreshed",
   (await q(`SELECT 1 FROM pg_stat_user_tables WHERE relname = 'plots' AND (last_analyze IS NOT NULL OR last_autoanalyze IS NOT NULL)`)).length === 1,
   "a plan read against stale statistics is not evidence of anything",
 );

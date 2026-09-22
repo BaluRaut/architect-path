@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+
+  modules:
+    name: Every module, against a real database
+    runs-on: ubuntu-latest
+    services:
+      db:
+        # Same multi-architecture image as docker-compose.yml.
+        image: imresamu/postgis:17-3.5
+        env:
+          POSTGRES_USER: architect
+          POSTGRES_PASSWORD: architect
+          POSTGRES_DB: architect
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U architect -d architect"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      # A smaller set in CI: the lessons hold, the runner does not spend a minute seeding.
+      - run: SEED_ROWS=120000 npm run seed
+      - name: Module 04
+        run: npm run m -- 04 --solution
+      - name: Module 05
+        run: npm run m -- 05 --solution
+      - name: Module 06
+        run: npm run m -- 06 --solution
